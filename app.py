@@ -8,7 +8,7 @@ import re
 
 st.set_page_config(page_title="Control de Inasistencias", layout="wide", initial_sidebar_state="collapsed")
 
-st.title("📊 Control de Inasistencias & Histórico de Conferencias")
+st.title("📊 Control de Inasistencia Conferencia Carlos Mazzetti")
 
 # Autenticación automática de API Key
 api_key = st.secrets.get("GEMINI_API_KEY", None)
@@ -42,7 +42,7 @@ if file_to_load:
 
     df_terr = data_df[data_df['TERRITORIAL'] == selected_terr].copy()
 
-    # 2. Ordenamiento inteligente de conferencias por fecha (DD/MM) de mayor a menor
+    # Funciones de extracción y recorte
     def extraer_fecha_orden(titulo):
         match = re.search(r'(\d{2}/\d{2})', str(titulo))
         if match:
@@ -50,15 +50,19 @@ if file_to_load:
             return (mes, dia)
         return (0, 0)
 
+    def acortar_titulo(titulo):
+        return str(titulo).split(':')[0].strip() if ':' in str(titulo) else str(titulo)
+
+    # 2. Ordenamiento inteligente: La última conferencia queda en el índice 0 (Default)
     if 'post_titulo' in df_terr.columns:
         conferencias_raw = df_terr['post_titulo'].dropna().unique().tolist()
         conferencias_ordenadas = sorted(conferencias_raw, key=extraer_fecha_orden, reverse=True)
-        opciones_conf = ["Todas las Conferencias (Histórico)"] + conferencias_ordenadas
+        opciones_conf = conferencias_ordenadas + ["Todas las Conferencias (Histórico)"]
     else:
         opciones_conf = ["Todas"]
 
     with col_conf:
-        selected_conf = st.selectbox("📅 Seleccionar Conferencia:", opciones_conf)
+        selected_conf = st.selectbox("📅 Seleccionar Conferencia:", opciones_conf, index=0)
 
     # Filtrar dataframe según la conferencia seleccionada
     if selected_conf != "Todas las Conferencias (Histórico)" and 'post_titulo' in df_terr.columns:
@@ -84,29 +88,35 @@ if file_to_load:
     # --- GRÁFICOS VISUALES ---
     col_hist, col_sup = st.columns([1, 1])
 
-    # Gráfico 1: Evolución Histórica por Conferencia
+    # Gráfico 1: Inasistencias por Conferencia (Leyenda limpia y etiquetas acortadas)
     with col_hist:
         st.subheader("📈 Inasistencias por Conferencia")
         if 'post_titulo' in df_terr.columns:
             hist_df = df_terr['post_titulo'].value_counts().reset_index()
             hist_df.columns = ['Conferencia', 'Inasistencias']
+            
+            hist_df['Conferencia_Corta'] = hist_df['Conferencia'].apply(acortar_titulo)
             hist_df['Orden'] = hist_df['Conferencia'].apply(extraer_fecha_orden)
             hist_df = hist_df.sort_values(by='Orden', ascending=True)
 
             fig_hist = px.bar(
-                hist_df, x='Conferencia', y='Inasistencias',
+                hist_df, x='Conferencia_Corta', y='Inasistencias',
                 text='Inasistencias', color='Inasistencias',
                 color_continuous_scale='Blues'
             )
             fig_hist.update_layout(
-                yaxis={'fixedrange': True}, xaxis={'fixedrange': True},
-                showlegend=False, height=320, xaxis_title=None
+                yaxis={'fixedrange': True}, 
+                xaxis={'fixedrange': True},
+                showlegend=False,
+                coloraxis_showscale=False,  # Oculta la leyenda lateral de color
+                height=320, 
+                xaxis_title=None
             )
             st.plotly_chart(fig_hist, use_container_width=True, config={'displayModeBar': False})
         else:
             st.info("Sin datos de histórico de conferencias.")
 
-    # Gráfico 2: Ausencias por Supervisor (Periodo seleccionado)
+    # Gráfico 2: Ausencias por Supervisor
     with col_sup:
         st.subheader("📌 Ausencias por Supervisor")
         if 'Jerarquia_Dinamica' in df_filtered.columns:
@@ -119,7 +129,10 @@ if file_to_load:
             )
             fig_sup.update_layout(
                 yaxis={'categoryorder':'total ascending', 'fixedrange': True}, 
-                xaxis={'fixedrange': True}, showlegend=False, height=320
+                xaxis={'fixedrange': True}, 
+                showlegend=False,
+                coloraxis_showscale=False,
+                height=320
             )
             st.plotly_chart(fig_sup, use_container_width=True, config={'displayModeBar': False})
 
@@ -140,9 +153,11 @@ if file_to_load:
                 top_3_str = "\n".join([f"- {row['Supervisor']}: {row['Casos']} ausencias" for _, row in top_sup.head(3).iterrows()]) if 'Jerarquia_Dinamica' in df_filtered.columns else "N/A"
                 agentes_sample = ", ".join(df_filtered[agentes_col].dropna().head(5).astype(str).tolist())
                 
+                conf_nombre_corto = acortar_titulo(selected_conf)
+                
                 prompt = f"""
                 Actúa como Director de Operaciones. Redacta un mensaje para el líder territorial {selected_terr}.
-                Contexto: {selected_conf}.
+                Contexto: Conferencia {conf_nombre_corto}.
                 
                 DATOS DEL PERIODO:
                 - Inasistencias en este corte: {len(df_filtered)}
@@ -175,7 +190,6 @@ if file_to_load:
 
         st.dataframe(df_disp, use_container_width=True, height=220)
 
-        # Botón de Descarga
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df_disp.to_excel(writer, index=False, sheet_name='Pendientes')
