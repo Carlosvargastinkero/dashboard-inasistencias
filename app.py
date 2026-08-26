@@ -5,9 +5,10 @@ from google import genai
 import io
 import os
 
-st.set_page_config(page_title="Dashboard Operativo", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Control de Inasistencia", layout="wide", initial_sidebar_state="collapsed")
 
-st.title("📊 Control de Inasistencias & Coaching Operativo")
+# 1. Título actualizado
+st.title("📊 Control de Inasistencia Conferencia Carlos Mazzetti")
 
 # Autenticación automática de API Key
 api_key = st.secrets.get("GEMINI_API_KEY", None)
@@ -19,7 +20,7 @@ if not api_key:
 
 uploaded_file = st.sidebar.file_uploader("Actualizar Base Excel (.xlsx)", type=["xlsx"])
 
-# Determinar fuente de datos (Archivo subido > Archivo base en repositorio)
+# Determinar fuente de datos
 file_to_load = None
 if uploaded_file:
     file_to_load = uploaded_file
@@ -68,8 +69,15 @@ if file_to_load:
             top_sup.columns = ['Supervisor', 'Casos']
             fig = px.bar(top_sup.head(6), x='Casos', y='Supervisor', orientation='h', 
                          text='Casos', color='Casos', color_continuous_scale='Reds')
-            fig.update_layout(yaxis={'categoryorder':'total ascending'}, showlegend=False, height=320)
-            st.plotly_chart(fig, use_container_width=True)
+            
+            # 2. Bloqueo de zoom/lupa y desactivación de barra flotante Plotly
+            fig.update_layout(
+                yaxis={'categoryorder':'total ascending', 'fixedrange': True}, 
+                xaxis={'fixedrange': True},
+                showlegend=False, 
+                height=320
+            )
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
         else:
             st.warning("No se encontró la columna 'Jerarquia_Dinamica'.")
 
