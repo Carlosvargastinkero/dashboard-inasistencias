@@ -8,7 +8,7 @@ import os
 st.set_page_config(page_title="Control de Inasistencia", layout="wide", initial_sidebar_state="collapsed")
 
 # 1. Título actualizado
-st.title("📊 Control de Inasistencia Conferencia Carlos Mazzetti")
+st.title("📊 Control de Inasistencia: Conferencias Carlos Mazzetti")
 
 # Autenticación automática de API Key
 api_key = st.secrets.get("GEMINI_API_KEY", None)
