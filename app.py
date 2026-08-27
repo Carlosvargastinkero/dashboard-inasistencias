@@ -104,6 +104,13 @@ st.markdown("""
         border-radius: 8px !important;
     }
 
+    /* 10. Bloques de código para copiar */
+    div[data-testid="stCodeBlock"] {
+        background-color: #FFFFFF !important;
+        border: 1px solid #096045 !important;
+        border-radius: 8px !important;
+    }
+
     /* Menú lateral */
     [data-testid="stSidebar"] {
         background-color: #FFFFFF !important;
@@ -216,15 +223,16 @@ if file_to_load:
                 with st.spinner("Analizando desempeño territorial..."):
                     try:
                         res = client.models.generate_content(model="gemini-3.6-flash", contents=prompt_1)
+                        # Formato con vista bonita + opción de copiado fácil
                         st.markdown(res.text)
+                        st.caption("📋 **Toca el recuadro inferior para copiar el texto:**")
+                        st.code(res.text, language=None)
                     except Exception as e:
                         st.error(f"Error al conectar con la IA: {e}")
 
     st.divider()
 
-    # --- CÁLCULO DE MÉTRICAS CORREGIDO ---
-    
-    # 1. Variación vs Conferencia Anterior (Inasistencia vs Conf. Anterior)
+    # --- CÁLCULO DE MÉTRICAS ---
     cant_actual = len(df_terr)
     delta_text = "Sin conf. previa"
     
@@ -242,7 +250,6 @@ if file_to_load:
             else:
                 delta_text = "Sin cambio"
 
-    # 2. Desglose FQ vs PR (PR comprende POS y TC)
     if 'TIPO' in df_terr.columns:
         tipos_upper = df_terr['TIPO'].fillna('').astype(str).str.upper()
         fq_count = df_terr[tipos_upper == 'FQ'][agentes_col].nunique()
@@ -373,11 +380,13 @@ if file_to_load:
                         with st.spinner("Analizando desempeño del supervisor..."):
                             try:
                                 res = client.models.generate_content(model="gemini-3.6-flash", contents=prompt_2)
+                                # Formato con vista bonita + opción de copiado fácil
                                 st.markdown(res.text)
+                                st.caption("📋 **Toca el recuadro inferior para copiar el texto:**")
+                                st.code(res.text, language=None)
                             except Exception as e:
                                 st.error(f"Error al conectar con la IA: {e}")
 
-        # Aplicar doble filtro en la tabla (Supervisor + Tipo Punto con POS y TC)
         df_disp = df_terr.copy()
         if selected_sup != "Todos":
             df_disp = df_disp[df_disp['Jerarquia_Dinamica'] == selected_sup]
