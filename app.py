@@ -222,9 +222,9 @@ if file_to_load:
 
     st.divider()
 
-    # --- CÁLCULO DE MÉTRICAS NUEVAS ---
+    # --- CÁLCULO DE MÉTRICAS CORREGIDO ---
     
-    # 1. Variación vs Conferencia Anterior
+    # 1. Variación vs Conferencia Anterior (Inasistencia vs Conf. Anterior)
     cant_actual = len(df_terr)
     delta_text = "Sin conf. previa"
     
@@ -236,17 +236,17 @@ if file_to_load:
             diferencia = cant_actual - cant_anterior
             
             if diferencia > 0:
-                delta_text = f"+{diferencia} (Empeoró)"
+                delta_text = f"Empeoró (+{diferencia})"
             elif diferencia < 0:
-                delta_text = f"{diferencia} (Mejoró)"
+                delta_text = f"Mejoró ({diferencia})"
             else:
-                delta_text = "0 (Sin cambio)"
+                delta_text = "Sin cambio"
 
-    # 2. Desglose FQ vs PR (PR comprende PR y TC)
+    # 2. Desglose FQ vs PR (PR comprende POS y TC)
     if 'TIPO' in df_terr.columns:
         tipos_upper = df_terr['TIPO'].fillna('').astype(str).str.upper()
         fq_count = df_terr[tipos_upper == 'FQ'][agentes_col].nunique()
-        pr_count = df_terr[tipos_upper.isin(['PR', 'TC'])][agentes_col].nunique()
+        pr_count = df_terr[tipos_upper.isin(['POS', 'TC'])][agentes_col].nunique()
         
         if fq_count > 0 and pr_count > 0:
             comercios_str = f"FQ: {fq_count} | PR: {pr_count}"
@@ -262,7 +262,7 @@ if file_to_load:
     # --- TARJETAS DE MÉTRICAS ---
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Inasistencias", cant_actual)
-    col2.metric("vs. Conf. Anterior", delta_text)
+    col2.metric("Inasistencia vs Conf. Anterior", delta_text)
     col3.metric("Conferencias Analizadas", df_terr_historico['post_titulo'].nunique() if 'post_titulo' in df_terr_historico.columns else 1)
     col4.metric("Comercio Únicos", comercios_str)
 
@@ -377,7 +377,7 @@ if file_to_load:
                             except Exception as e:
                                 st.error(f"Error al conectar con la IA: {e}")
 
-        # Aplicar doble filtro en la tabla (Supervisor + Tipo Punto)
+        # Aplicar doble filtro en la tabla (Supervisor + Tipo Punto con POS y TC)
         df_disp = df_terr.copy()
         if selected_sup != "Todos":
             df_disp = df_disp[df_disp['Jerarquia_Dinamica'] == selected_sup]
@@ -387,7 +387,7 @@ if file_to_load:
             if selected_tipo == "FQ":
                 df_disp = df_disp[tipos_disp_upper == 'FQ']
             elif selected_tipo == "PR":
-                df_disp = df_disp[tipos_disp_upper.isin(['PR', 'TC'])]
+                df_disp = df_disp[tipos_disp_upper.isin(['POS', 'TC'])]
 
     else:
         df_disp = df_terr
