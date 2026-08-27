@@ -6,11 +6,76 @@ import io
 import os
 import re
 
-st.set_page_config(page_title="Control de Inasistencias", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="La Tinka - Control de Inasistencias", layout="wide", initial_sidebar_state="collapsed")
 
-st.title("📊 Control de Inasistencia Conferencia Carlos Mazzetti")
+# --- INYECCIÓN DE ESTILOS CORPORATIVOS (MANUAL DE MARCA LA TINKA) ---
+st.markdown("""
+<style>
+    /* Fondo General Beige */
+    .stApp {
+        background-color: #F5F0D4;
+        color: #000000;
+    }
+    
+    /* Títulos y Subtítulos en Verde Oscuro */
+    h1, h2, h3, h4, h5, h6, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
+        color: #096045 !important;
+        font-weight: 700 !important;
+    }
+    
+    /* Botones Principales Verde Oscuro con Hover Naranja */
+    div.stButton > button:first-child {
+        background-color: #096045 !important;
+        color: #FFFFFF !important;
+        border-radius: 8px !important;
+        border: none !important;
+        font-weight: bold !important;
+        padding: 8px 16px !important;
+    }
+    
+    div.stButton > button:first-child:hover {
+        background-color: #FF6700 !important;
+        color: #FFFFFF !important;
+    }
+    
+    /* Tarjetas de Métricas (KPIs) estilo corporativo */
+    [data-testid="stMetric"] {
+        background-color: #FFFFFF !important;
+        padding: 12px 16px !important;
+        border-radius: 10px !important;
+        border-left: 6px solid #096045 !important;
+        box-shadow: 0px 2px 5px rgba(0,0,0,0.05);
+    }
+    
+    [data-testid="stMetricLabel"] {
+        color: #096045 !important;
+        font-weight: bold !important;
+    }
+    
+    [data-testid="stMetricValue"] {
+        color: #000000 !important;
+    }
+    
+    /* Menú lateral flotante */
+    [data-testid="stSidebar"] {
+        background-color: #FFFFFF !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# Autenticación automática de API Key desde Secrets
+# --- ENCABEZADO: LOGO Y TÍTULO ---
+col_logo, col_title = st.columns([1, 3.5])
+
+with col_logo:
+    if os.path.exists("logo.png"):
+        st.image("logo.png", use_container_width=True)
+    else:
+        st.markdown("### 🎯 **La Tinka Agente**")
+
+with col_title:
+    st.title("Control de Inasistencia Conferencia Carlos Mazzetti")
+
+# Autenticación automática de API Key
 api_key = st.secrets.get("GEMINI_API_KEY", None)
 
 # Menú lateral para administración
@@ -43,15 +108,13 @@ if file_to_load:
     def acortar_titulo(titulo):
         return str(titulo).split(':')[0].strip() if ':' in str(titulo) else str(titulo)
 
-    # Identificación de agentes recurrentes a nivel global
     agentes_col = 'AGENTE' if 'AGENTE' in data_df.columns else data_df.columns[0]
     conteo_agentes_global = data_df[agentes_col].value_counts()
     agentes_recurrentes_set = set(conteo_agentes_global[conteo_agentes_global > 1].index)
 
-    # --- REORDENAMIENTO DE FILTROS PRINCIPALES ---
+    # --- FILTROS PRINCIPALES ---
     col_conf, col_terr = st.columns([1, 1])
 
-    # 1. Filtro Seleccionar Conferencia (Primero)
     if 'post_titulo' in data_df.columns:
         conferencias_raw = data_df['post_titulo'].dropna().unique().tolist()
         conferencias_ordenadas = sorted(conferencias_raw, key=extraer_fecha_orden, reverse=True)
@@ -62,13 +125,11 @@ if file_to_load:
     with col_conf:
         selected_conf = st.selectbox("📅 Seleccionar Conferencia:", opciones_conf, index=0)
 
-    # Base filtrada por conferencia
     if selected_conf != "Todas las Conferencias (Histórico)" and 'post_titulo' in data_df.columns:
         df_conf = data_df[data_df['post_titulo'] == selected_conf].copy()
     else:
         df_conf = data_df.copy()
 
-    # 2. Filtro Seleccionar Líder Territorial (Segundo)
     territoriales = data_df['TERRITORIAL'].dropna().unique()
     with col_terr:
         selected_terr = st.selectbox("🎯 Seleccionar Líder Territorial:", territoriales)
@@ -76,7 +137,7 @@ if file_to_load:
     df_terr = df_conf[df_conf['TERRITORIAL'] == selected_terr].copy()
     df_terr_historico = data_df[data_df['TERRITORIAL'] == selected_terr].copy()
 
-    # --- CÁLCULO DE RANKING TERRITORIAL ---
+    # --- RANKING TERRITORIAL ---
     ranking_terr_df = df_conf.groupby('TERRITORIAL').size().reset_index(name='Inasistencias')
     ranking_terr_df = ranking_terr_df.sort_values(by='Inasistencias', ascending=True).reset_index(drop=True)
     
@@ -85,7 +146,6 @@ if file_to_load:
     except IndexError:
         rank_terr = 99
 
-    # Apertura personalizada según ranking
     if rank_terr == 1:
         encabezado_terr = f"Felicidades {selected_terr} estás ocupando el 1er lugar. Para mantenerte cómo el líder de los territoriales deberás mejorar las siguientes oportunidades:"
     elif rank_terr in [2, 3]:
@@ -93,28 +153,19 @@ if file_to_load:
     else:
         encabezado_terr = f"Líder {selected_terr}, actualmente te ubicas en la posición {rank_terr}º entre los territoriales. Analicemos las oportunidades clave de mejora:"
 
-    # --- SECCIÓN: CONSEJO EXPERTO TERRITORIAL ---
+    # --- DIAGNÓSTICO TERRITORIAL ---
     with st.expander("💡 Recibe un consejo experto (Líder Territorial)", expanded=False):
         if st.button("🚀 Generar Diagnóstico Territorial", type="primary", key="btn_terr"):
             if not api_key:
                 st.error("API Key no configurada en los Secrets.")
             else:
                 client = genai.Client(api_key=api_key)
-                
-                # Datos de entrada para Prompt 1
                 total_inasistencias_terr = len(df_terr)
                 
-                # Pareto de supervisores
-                if 'Jerarquia_Dinamica' in df_terr.columns:
-                    pareto_sup = df_terr['Jerarquia_Dinamica'].value_counts()
-                    pareto_str = "\n".join([f"- {sup}: {cant} ausencias" for sup, cant in pareto_sup.items()])
-                else:
-                    pareto_str = "No disponible"
-
-                # Tendencia por conferencia de sus supervisores
+                pareto_str = "\n".join([f"- {sup}: {cant} ausencias" for sup, cant in df_terr['Jerarquia_Dinamica'].value_counts().items()]) if 'Jerarquia_Dinamica' in df_terr.columns else "No disponible"
+                
                 if 'post_titulo' in df_terr_historico.columns and 'Jerarquia_Dinamica' in df_terr_historico.columns:
-                    tendencia_df = df_terr_historico.groupby(['post_titulo', 'Jerarquia_Dinamica']).size().unstack(fill_value=0)
-                    tendencia_str = tendencia_df.to_string()
+                    tendencia_str = df_terr_historico.groupby(['post_titulo', 'Jerarquia_Dinamica']).size().unstack(fill_value=0).to_string()
                 else:
                     tendencia_str = "No disponible"
 
@@ -122,7 +173,7 @@ if file_to_load:
                 Inicia tu respuesta OBLIGATORIAMENTE con esta oración exacta:
                 "{encabezado_terr}"
 
-                Luego analiza ESTRICTAMENTE los siguientes 3 puntos numerados (no agregues conclusiones generales ni consejos adicionales fuera de ellos):
+                Luego analiza ESTRICTAMENTE los siguientes 3 puntos numerados (sin incluir conclusiones generales ni consejos adicionales fuera de ellos):
                 1. Total de inasistencias que tiene el líder territorial ({total_inasistencias_terr} inasistencias).
                 2. Pareto de cuáles son sus supervisores/regionales críticos según estas ausencias:
                 {pareto_str}
@@ -139,7 +190,7 @@ if file_to_load:
 
     st.divider()
 
-    # --- METRICAS CLAVE ---
+    # --- MÉTRICAS CLAVE ---
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Inasistencias", len(df_terr))
     col2.metric("Supervisores Afectados", df_terr['Jerarquia_Dinamica'].nunique() if 'Jerarquia_Dinamica' in df_terr.columns else 0)
@@ -148,7 +199,7 @@ if file_to_load:
 
     st.divider()
 
-    # --- GRÁFICOS VISUALES ---
+    # --- GRÁFICOS VISUALES CON PALETA CORPORATIVA ---
     col_hist, col_sup = st.columns([1, 1])
 
     with col_hist:
@@ -160,8 +211,15 @@ if file_to_load:
             hist_df['Orden'] = hist_df['Conferencia'].apply(extraer_fecha_orden)
             hist_df = hist_df.sort_values(by='Orden', ascending=True)
 
-            fig_hist = px.bar(hist_df, x='Conferencia_Corta', y='Inasistencias', text='Inasistencias', color='Inasistencias', color_continuous_scale='Blues')
-            fig_hist.update_layout(yaxis={'fixedrange': True}, xaxis={'fixedrange': True}, showlegend=False, coloraxis_showscale=False, height=300, xaxis_title=None)
+            fig_hist = px.bar(
+                hist_df, x='Conferencia_Corta', y='Inasistencias', text='Inasistencias',
+                color='Inasistencias', color_continuous_scale=['#3CC666', '#096045']
+            )
+            fig_hist.update_layout(
+                yaxis={'fixedrange': True}, xaxis={'fixedrange': True},
+                showlegend=False, coloraxis_showscale=False, height=300, xaxis_title=None,
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
+            )
             st.plotly_chart(fig_hist, use_container_width=True, config={'displayModeBar': False})
 
     with col_sup:
@@ -169,31 +227,33 @@ if file_to_load:
         if 'Jerarquia_Dinamica' in df_terr.columns:
             top_sup = df_terr['Jerarquia_Dinamica'].value_counts().reset_index()
             top_sup.columns = ['Supervisor', 'Casos']
-            fig_sup = px.bar(top_sup.head(6), x='Casos', y='Supervisor', orientation='h', text='Casos', color='Casos', color_continuous_scale='Reds')
-            fig_sup.update_layout(yaxis={'categoryorder':'total ascending', 'fixedrange': True}, xaxis={'fixedrange': True}, showlegend=False, coloraxis_showscale=False, height=300)
+            fig_sup = px.bar(
+                top_sup.head(6), x='Casos', y='Supervisor', orientation='h', text='Casos',
+                color='Casos', color_continuous_scale=['#FF6700', '#096045']
+            )
+            fig_sup.update_layout(
+                yaxis={'categoryorder':'total ascending', 'fixedrange': True}, xaxis={'fixedrange': True},
+                showlegend=False, coloraxis_showscale=False, height=300,
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
+            )
             st.plotly_chart(fig_sup, use_container_width=True, config={'displayModeBar': False})
 
     st.divider()
 
-    # --- SECCIÓN: AGENTES PENDIENTES & CONSEJO SUPERVISOR ---
+    # --- SECCIÓN AGENTES PENDIENTES & DIAGNÓSTICO SUPERVISOR ---
     st.subheader("📋 Agentes Pendientes & Gestión de Supervisor")
 
     if 'Jerarquia_Dinamica' in df_terr.columns:
         supervisores_unicos = list(df_terr['Jerarquia_Dinamica'].dropna().unique())
-        
-        # Ranking de supervisores dentro del territorio
-        ranking_sup_df = df_terr.groupby('Jerarquia_Dinamica').size().reset_index(name='Inasistencias')
-        ranking_sup_df = ranking_sup_df.sort_values(by='Inasistencias', ascending=True).reset_index(drop=True)
+        ranking_sup_df = df_terr.groupby('Jerarquia_Dinamica').size().reset_index(name='Inasistencias').sort_values(by='Inasistencias', ascending=True).reset_index(drop=True)
 
         col_select_sup, col_expert_sup = st.columns([1, 1.2])
 
         with col_select_sup:
             selected_sup = st.selectbox("Filtrar Tabla por Supervisor:", ["Todos"] + supervisores_unicos)
 
-        # Determinar el supervisor a evaluar
         sup_evaluado = selected_sup if selected_sup != "Todos" else (supervisores_unicos[0] if supervisores_unicos else "Sin Supervisor")
 
-        # Posición del supervisor
         try:
             rank_sup = ranking_sup_df[ranking_sup_df['Jerarquia_Dinamica'] == sup_evaluado].index[0] + 1
         except IndexError:
@@ -217,11 +277,9 @@ if file_to_load:
                         df_sup_actual = df_terr[df_terr['Jerarquia_Dinamica'] == sup_evaluado]
                         total_ausencias_sup = len(df_sup_actual)
                         
-                        # Histórico del supervisor
                         df_sup_hist = df_terr_historico[df_terr_historico['Jerarquia_Dinamica'] == sup_evaluado]
                         tendencia_sup = df_sup_hist.groupby('post_titulo').size().to_dict() if 'post_titulo' in df_sup_hist.columns else {}
 
-                        # Análisis de recurrencia
                         agentes_sup = df_sup_actual[agentes_col].dropna().unique()
                         recurrentes_cant = sum(1 for ag in agentes_sup if ag in agentes_recurrentes_set)
                         nuevos_cant = len(agentes_sup) - recurrentes_cant
@@ -230,7 +288,7 @@ if file_to_load:
                         Inicia tu respuesta OBLIGATORIAMENTE con esta oración exacta:
                         "{encabezado_sup}"
 
-                        Luego analiza ESTRICTAMENTE los siguientes 3 puntos numerados (no agregues conclusiones generales ni consejos adicionales fuera de ellos):
+                        Luego analiza ESTRICTAMENTE los siguientes 3 puntos numerados (sin incluir conclusiones generales ni consejos adicionales fuera de ellos):
                         1. Total de inasistencias en su zona ({total_ausencias_sup} inasistencias).
                         2. Análisis de si viene mejorando o empeorando en inasistencia según sus datos históricos por conferencia:
                         {tendencia_sup}
@@ -244,15 +302,12 @@ if file_to_load:
                             except Exception as e:
                                 st.error(f"Error al conectar con la IA: {e}")
 
-        # Filtrar tabla para mostrar
         df_disp = df_terr[df_terr['Jerarquia_Dinamica'] == selected_sup] if selected_sup != "Todos" else df_terr
-
     else:
         df_disp = df_terr
 
     st.dataframe(df_disp, use_container_width=True, height=250)
 
-    # Botón de Descarga Excel
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df_disp.to_excel(writer, index=False, sheet_name='Pendientes')
