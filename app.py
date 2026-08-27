@@ -8,7 +8,7 @@ import re
 
 st.set_page_config(page_title="La Tinka - Control de Inasistencias", layout="wide", initial_sidebar_state="collapsed")
 
-# --- INYECCIÓN CSS: MODO CLARO Y PALETA LA TINKA ---
+# --- INYECCIÓN CSS: MODO CLARO CORPORATIVO Y CORRECCIÓN DE BOTONES ---
 st.markdown("""
 <style>
     /* 1. Fondo General Beige */
@@ -28,14 +28,14 @@ st.markdown("""
         font-weight: 800 !important;
     }
     
-    /* 4. Etiqueta sobre los Listados Desplegables (Contraste) */
+    /* 4. Etiqueta sobre los Listados Desplegables */
     label[data-testid="stWidgetLabel"] p {
         color: #096045 !important;
         font-weight: bold !important;
         font-size: 1.05rem !important;
     }
     
-    /* 5. Cajas de Selección (Selectbox) en Fondo Blanco y Texto Oscuro */
+    /* 5. Cajas de Selección (Selectbox) */
     div[data-baseweb="select"] > div {
         background-color: #FFFFFF !important;
         border: 2px solid #096045 !important;
@@ -64,7 +64,7 @@ st.markdown("""
         font-weight: 800 !important;
     }
 
-    /* 7. Desplegables / Acordeones ("Recibe un consejo experto") */
+    /* 7. Desplegables / Acordeones */
     div[data-testid="stExpander"] {
         background-color: #FFFFFF !important;
         border: 2px solid #096045 !important;
@@ -76,22 +76,28 @@ st.markdown("""
         font-size: 1.05rem !important;
     }
 
-    /* 8. Botones en Verde Tinka con Hover Naranja Te Apuesto */
-    div.stButton > button, div.stDownloadButton > button {
+    /* 8. BOTONES: TEXTO BLANCO Y NEGRITA FORZADO */
+    div.stButton > button, 
+    div.stDownloadButton > button,
+    div.stButton > button *, 
+    div.stDownloadButton > button * {
         background-color: #096045 !important;
         color: #FFFFFF !important;
         border-radius: 8px !important;
         border: none !important;
-        font-weight: bold !important;
-        width: 100% !important;
-        padding: 10px 16px !important;
+        font-weight: 800 !important;
+        font-size: 1rem !important;
     }
-    div.stButton > button:hover, div.stDownloadButton > button:hover {
+    
+    div.stButton > button:hover, 
+    div.stDownloadButton > button:hover,
+    div.stButton > button:hover *, 
+    div.stDownloadButton > button:hover * {
         background-color: #FF6700 !important;
         color: #FFFFFF !important;
     }
 
-    /* 9. Tabla / Dataframe en Fondo Claro */
+    /* 9. Tabla / Dataframe */
     [data-testid="stDataFrame"] {
         background-color: #FFFFFF !important;
         border: 1px solid #096045 !important;
@@ -105,7 +111,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- ENCABEZADO CON LOGO OPTIMIZADO PARA MÓVIL ---
+# --- ENCABEZADO CON LOGO ---
 if os.path.exists("logo.png"):
     st.image("logo.png", width=220)
 else:
@@ -172,7 +178,7 @@ if file_to_load:
     df_terr = df_conf[df_conf['TERRITORIAL'] == selected_terr].copy()
     df_terr_historico = data_df[data_df['TERRITORIAL'] == selected_terr].copy()
 
-    # Ranking
+    # Ranking Territorial
     ranking_terr_df = df_conf.groupby('TERRITORIAL').size().reset_index(name='Inasistencias').sort_values(by='Inasistencias', ascending=True).reset_index(drop=True)
     try:
         rank_terr = ranking_terr_df[ranking_terr_df['TERRITORIAL'] == selected_terr].index[0] + 1
@@ -216,16 +222,53 @@ if file_to_load:
 
     st.divider()
 
-    # --- MÉTRICAS ---
+    # --- CÁLCULO DE MÉTRICAS NUEVAS ---
+    
+    # 1. Variación vs Conferencia Anterior
+    cant_actual = len(df_terr)
+    delta_text = "Sin conf. previa"
+    
+    if selected_conf in conferencias_ordenadas:
+        idx_conf = conferencias_ordenadas.index(selected_conf)
+        if idx_conf + 1 < len(conferencias_ordenadas):
+            conf_anterior = conferencias_ordenadas[idx_conf + 1]
+            cant_anterior = len(df_terr_historico[df_terr_historico['post_titulo'] == conf_anterior])
+            diferencia = cant_actual - cant_anterior
+            
+            if diferencia > 0:
+                delta_text = f"+{diferencia} (Empeoró)"
+            elif diferencia < 0:
+                delta_text = f"{diferencia} (Mejoró)"
+            else:
+                delta_text = "0 (Sin cambio)"
+
+    # 2. Desglose FQ vs PR (PR comprende PR y TC)
+    if 'TIPO' in df_terr.columns:
+        tipos_upper = df_terr['TIPO'].fillna('').astype(str).str.upper()
+        fq_count = df_terr[tipos_upper == 'FQ'][agentes_col].nunique()
+        pr_count = df_terr[tipos_upper.isin(['PR', 'TC'])][agentes_col].nunique()
+        
+        if fq_count > 0 and pr_count > 0:
+            comercios_str = f"FQ: {fq_count} | PR: {pr_count}"
+        elif fq_count > 0:
+            comercios_str = f"FQ: {fq_count}"
+        elif pr_count > 0:
+            comercios_str = f"PR: {pr_count}"
+        else:
+            comercios_str = "0"
+    else:
+        comercios_str = str(df_terr[agentes_col].nunique())
+
+    # --- TARJETAS DE MÉTRICAS ---
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Inasistencias", len(df_terr))
-    col2.metric("Supervisores Afectados", df_terr['Jerarquia_Dinamica'].nunique() if 'Jerarquia_Dinamica' in df_terr.columns else 0)
+    col1.metric("Total Inasistencias", cant_actual)
+    col2.metric("vs. Conf. Anterior", delta_text)
     col3.metric("Conferencias Analizadas", df_terr_historico['post_titulo'].nunique() if 'post_titulo' in df_terr_historico.columns else 1)
-    col4.metric("Comercios Únicos", df_terr[agentes_col].nunique())
+    col4.metric("Comercio Únicos", comercios_str)
 
     st.divider()
 
-    # --- GRÁFICOS CON TEXTOS EN VERDE OSCURO ---
+    # --- GRÁFICOS ---
     col_hist, col_sup = st.columns([1, 1])
 
     with col_hist:
@@ -241,7 +284,6 @@ if file_to_load:
                 hist_df, x='Conferencia_Corta', y='Inasistencias', text='Inasistencias',
                 color='Inasistencias', color_continuous_scale=['#3CC666', '#096045']
             )
-            # Ajuste explícito de color de texto en ejes a Verde Oscuro (#096045)
             fig_hist.update_layout(
                 yaxis={'fixedrange': True, 'tickfont': {'color': '#096045', 'size': 12, 'family': 'Arial'}, 'title': {'text': ''}}, 
                 xaxis={'fixedrange': True, 'tickfont': {'color': '#096045', 'size': 11, 'family': 'Arial'}, 'title': {'text': ''}},
@@ -280,10 +322,13 @@ if file_to_load:
         supervisores_unicos = list(df_terr['Jerarquia_Dinamica'].dropna().unique())
         ranking_sup_df = df_terr.groupby('Jerarquia_Dinamica').size().reset_index(name='Inasistencias').sort_values(by='Inasistencias', ascending=True).reset_index(drop=True)
 
-        col_select_sup, col_expert_sup = st.columns([1, 1.2])
+        col_select_sup, col_select_tipo, col_expert_sup = st.columns([1, 0.8, 1.2])
 
         with col_select_sup:
             selected_sup = st.selectbox("Filtrar Tabla por Supervisor:", ["Todos"] + supervisores_unicos)
+
+        with col_select_tipo:
+            selected_tipo = st.selectbox("Filtrar por Tipo Punto:", ["Todos", "FQ", "PR"])
 
         sup_evaluado = selected_sup if selected_sup != "Todos" else (supervisores_unicos[0] if supervisores_unicos else "Sin Supervisor")
 
@@ -332,7 +377,18 @@ if file_to_load:
                             except Exception as e:
                                 st.error(f"Error al conectar con la IA: {e}")
 
-        df_disp = df_terr[df_terr['Jerarquia_Dinamica'] == selected_sup] if selected_sup != "Todos" else df_terr
+        # Aplicar doble filtro en la tabla (Supervisor + Tipo Punto)
+        df_disp = df_terr.copy()
+        if selected_sup != "Todos":
+            df_disp = df_disp[df_disp['Jerarquia_Dinamica'] == selected_sup]
+            
+        if 'TIPO' in df_disp.columns and selected_tipo != "Todos":
+            tipos_disp_upper = df_disp['TIPO'].fillna('').astype(str).str.upper()
+            if selected_tipo == "FQ":
+                df_disp = df_disp[tipos_disp_upper == 'FQ']
+            elif selected_tipo == "PR":
+                df_disp = df_disp[tipos_disp_upper.isin(['PR', 'TC'])]
+
     else:
         df_disp = df_terr
 
