@@ -112,6 +112,7 @@ st.markdown("""
         border: none !important;
         font-weight: 800 !important;
         font-size: 1rem !important;
+        margin-bottom: 4px !important;
     }
     
     div.stButton > button:hover, 
@@ -217,17 +218,17 @@ if file_to_load:
     with col_terr:
         selected_terr = st.selectbox("🎯 Seleccionar Líder Territorial:", territoriales)
 
-    # 🏪 NUEVO FILTRO GLOBAL: Tipo de Punto (Debajo del Líder Territorial)
+    # 🏪 FILTRO GLOBAL: Tipo de Punto
     selected_tipo = st.selectbox("🏪 Filtrar por Tipo de Punto:", ["Todos", "FQ", "PR"])
 
-    # Aplicación estricta del filtro por Tipo de Punto sobre los datos procesados
+    # Aplicación del filtro por Tipo de Punto
     df_conf_filtrado = aplicar_filtro_tipo(df_conf, selected_tipo)
     df_terr = df_conf_filtrado[df_conf_filtrado['TERRITORIAL'] == selected_terr].copy()
     
     df_data_historico_tipo = aplicar_filtro_tipo(data_df, selected_tipo)
     df_terr_historico = df_data_historico_tipo[df_data_historico_tipo['TERRITORIAL'] == selected_terr].copy()
 
-    # Ranking Territorial (Calculado dinámicamente con el filtro de tipo aplicado)
+    # Ranking Territorial
     ranking_terr_df = df_conf_filtrado.groupby('TERRITORIAL').size().reset_index(name='Inasistencias').sort_values(by='Inasistencias', ascending=True).reset_index(drop=True)
     try:
         rank_terr = ranking_terr_df[ranking_terr_df['TERRITORIAL'] == selected_terr].index[0] + 1
@@ -378,7 +379,6 @@ if file_to_load:
     # --- TABLA Y DIAGNÓSTICO SUPERVISOR ---
     st.subheader("📋 Agentes Pendientes & Gestión de Supervisor")
 
-    # Obtención de la lista completa de supervisores del territorio (incluso si tienen 0 inasistencias en el tipo seleccionado)
     supervisores_territorio = list(df_conf[df_conf['TERRITORIAL'] == selected_terr]['Jerarquia_Dinamica'].dropna().unique()) if 'Jerarquia_Dinamica' in df_conf.columns else []
 
     if supervisores_territorio:
@@ -389,7 +389,6 @@ if file_to_load:
 
         sup_evaluado = selected_sup if selected_sup != "Todos" else supervisores_territorio[0]
 
-        # Ranking del supervisor dentro del territorio
         if not df_terr.empty:
             ranking_sup_df = df_terr.groupby('Jerarquia_Dinamica').size().reset_index(name='Inasistencias').sort_values(by='Inasistencias', ascending=True).reset_index(drop=True)
             try:
@@ -446,7 +445,6 @@ if file_to_load:
                             except Exception as e:
                                 st.error(f"Error al conectar con la IA: {e}")
 
-        # Filtrar tabla para visualización
         df_disp = df_terr.copy()
         if selected_sup != "Todos":
             df_disp = df_disp[df_disp['Jerarquia_Dinamica'] == selected_sup] if not df_disp.empty else pd.DataFrame()
@@ -467,6 +465,30 @@ if file_to_load:
         file_name=f"Inasistencias_{selected_terr}_{selected_tipo}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
+    # 📋 NUEVO BOTÓN: Copiar datos para WhatsApp
+    if st.button(f"📋 Copiar datos ({len(df_disp)} registros)", key="btn_copiar_tabla"):
+        if not df_disp.empty:
+            col_t = [c for c in df_disp.columns if str(c).lower() == 'tipo']
+            col_u = [c for c in df_disp.columns if str(c).lower() in ['username', 'user', 'codigo']]
+            col_a = [c for c in df_disp.columns if str(c).lower() in ['agente', 'comercio']]
+
+            c_t = col_t[0] if col_t else None
+            c_u = col_u[0] if col_u else None
+            c_a = col_a[0] if col_a else None
+
+            filas = []
+            for _, row in df_disp.iterrows():
+                vt = str(row[c_t]) if (c_t and pd.notna(row[c_t])) else ""
+                vu = str(row[c_u]) if (c_u and pd.notna(row[c_u])) else ""
+                va = str(row[c_a]) if (c_a and pd.notna(row[c_a])) else ""
+                filas.append(f"{vt} | {vu} | {va}".strip(" |"))
+
+            texto_copia = "\n".join(filas)
+            st.caption("📋 **Toca el recuadro inferior para copiar la lista y pegarla en WhatsApp:**")
+            st.code(texto_copia, language=None)
+        else:
+            st.warning("No hay registros para copiar.")
 
 else:
     st.warning("⚠️ Sube o actualiza la base 'data.xlsx' para visualizar el dashboard.")
