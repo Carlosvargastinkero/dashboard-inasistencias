@@ -181,6 +181,16 @@ if file_to_load:
     def acortar_titulo(titulo):
         return str(titulo).split(':')[0].strip() if ':' in str(titulo) else str(titulo)
 
+    def aplicar_filtro_tipo(df, tipo_sel):
+        if 'TIPO' not in df.columns or tipo_sel == "Todos":
+            return df.copy()
+        tipos_upper = df['TIPO'].fillna('').astype(str).str.upper()
+        if tipo_sel == "FQ":
+            return df[tipos_upper == 'FQ'].copy()
+        elif tipo_sel == "PR":
+            return df[tipos_upper.isin(['POS', 'TC'])].copy()
+        return df.copy()
+
     agentes_col = 'AGENTE' if 'AGENTE' in data_df.columns else data_df.columns[0]
     conteo_agentes_global = data_df[agentes_col].value_counts()
     agentes_recurrentes_set = set(conteo_agentes_global[conteo_agentes_global > 1].index)
@@ -207,11 +217,18 @@ if file_to_load:
     with col_terr:
         selected_terr = st.selectbox("🎯 Seleccionar Líder Territorial:", territoriales)
 
-    df_terr = df_conf[df_conf['TERRITORIAL'] == selected_terr].copy()
-    df_terr_historico = data_df[data_df['TERRITORIAL'] == selected_terr].copy()
+    # 🏪 NUEVO FILTRO GLOBAL: Tipo de Punto (Debajo del Líder Territorial)
+    selected_tipo = st.selectbox("🏪 Filtrar por Tipo de Punto:", ["Todos", "FQ", "PR"])
 
-    # Ranking Territorial
-    ranking_terr_df = df_conf.groupby('TERRITORIAL').size().reset_index(name='Inasistencias').sort_values(by='Inasistencias', ascending=True).reset_index(drop=True)
+    # Aplicación estricta del filtro por Tipo de Punto sobre los datos procesados
+    df_conf_filtrado = aplicar_filtro_tipo(df_conf, selected_tipo)
+    df_terr = df_conf_filtrado[df_conf_filtrado['TERRITORIAL'] == selected_terr].copy()
+    
+    df_data_historico_tipo = aplicar_filtro_tipo(data_df, selected_tipo)
+    df_terr_historico = df_data_historico_tipo[df_data_historico_tipo['TERRITORIAL'] == selected_terr].copy()
+
+    # Ranking Territorial (Calculado dinámicamente con el filtro de tipo aplicado)
+    ranking_terr_df = df_conf_filtrado.groupby('TERRITORIAL').size().reset_index(name='Inasistencias').sort_values(by='Inasistencias', ascending=True).reset_index(drop=True)
     try:
         rank_terr = ranking_terr_df[ranking_terr_df['TERRITORIAL'] == selected_terr].index[0] + 1
     except IndexError:
@@ -231,15 +248,23 @@ if file_to_load:
             else:
                 client = genai.Client(api_key=api_key)
                 total_inasistencias_terr = len(df_terr)
-                pareto_str = "\n".join([f"- {sup}: {cant} ausencias" for sup, cant in df_terr['Jerarquia_Dinamica'].value_counts().items()]) if 'Jerarquia_Dinamica' in df_terr.columns else "No disponible"
-                tendencia_str = df_terr_historico.groupby(['post_titulo', 'Jerarquia_Dinamica']).size().unstack(fill_value=0).to_string() if 'post_titulo' in df_terr_historico.columns and 'Jerarquia_Dinamica' in df_terr_historico.columns else "No disponible"
+                
+                if not df_terr.empty and 'Jerarquia_Dinamica' in df_terr.columns:
+                    pareto_str = "\n".join([f"- {sup}: {cant} ausencias" for sup, cant in df_terr['Jerarquia_Dinamica'].value_counts().items()])
+                else:
+                    pareto_str = "Sin inasistencias registradas para el filtro seleccionado."
+
+                if not df_terr_historico.empty and 'post_titulo' in df_terr_historico.columns and 'Jerarquia_Dinamica' in df_terr_historico.columns:
+                    tendencia_str = df_terr_historico.groupby(['post_titulo', 'Jerarquia_Dinamica']).size().unstack(fill_value=0).to_string()
+                else:
+                    tendencia_str = "Sin histórico disponible para el filtro seleccionado."
 
                 prompt_1 = f"""
                 Inicia tu respuesta OBLIGATORIAMENTE con esta oración exacta:
                 "{encabezado_terr}"
 
                 Luego analiza ESTRICTAMENTE los siguientes 3 puntos numerados (sin incluir conclusiones generales ni consejos adicionales fuera de ellos):
-                1. Total de inasistencias que tiene el líder territorial ({total_inasistencias_terr} inasistencias).
+                1. Total de inasistencias que tiene el líder territorial ({total_inasistencias_terr} inasistencias para el filtro de punto '{selected_tipo}').
                 2. Pareto de cuáles son sus supervisores/regionales críticos según estas ausencias:
                 {pareto_str}
                 3. Análisis de tendencia histórica de sus supervisores a lo largo de las conferencias:
@@ -274,7 +299,7 @@ if file_to_load:
             else:
                 delta_text = "Sin cambio"
 
-    if 'TIPO' in df_terr.columns:
+    if 'TIPO' in df_terr.columns and not df_terr.empty:
         tipos_upper = df_terr['TIPO'].fillna('').astype(str).str.upper()
         fq_count = df_terr[tipos_upper == 'FQ'][agentes_col].nunique()
         pr_count = df_terr[tipos_upper.isin(['POS', 'TC'])][agentes_col].nunique()
@@ -288,13 +313,13 @@ if file_to_load:
         else:
             comercios_str = "0"
     else:
-        comercios_str = str(df_terr[agentes_col].nunique())
+        comercios_str = str(df_terr[agentes_col].nunique()) if not df_terr.empty else "0"
 
     # --- TARJETAS DE MÉTRICAS ---
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Inasistencias", cant_actual)
     col2.metric("Inasistencia vs Conf. Anterior", delta_text)
-    col3.metric("Conferencias Analizadas", df_terr_historico['post_titulo'].nunique() if 'post_titulo' in df_terr_historico.columns else 1)
+    col3.metric("Conferencias Analizadas", df_terr_historico['post_titulo'].nunique() if ('post_titulo' in df_terr_historico.columns and not df_terr_historico.empty) else 1)
     col4.metric("Comercio Únicos", comercios_str)
 
     st.divider()
@@ -304,7 +329,7 @@ if file_to_load:
 
     with col_hist:
         st.subheader("📈 Inasistencias por Conferencia")
-        if 'post_titulo' in df_terr_historico.columns:
+        if 'post_titulo' in df_terr_historico.columns and not df_terr_historico.empty:
             hist_df = df_terr_historico['post_titulo'].value_counts().reset_index()
             hist_df.columns = ['Conferencia', 'Inasistencias']
             hist_df['Conferencia_Corta'] = hist_df['Conferencia'].apply(acortar_titulo)
@@ -324,10 +349,12 @@ if file_to_load:
             )
             fig_hist.update_traces(textposition='inside', textfont={'color': 'white', 'weight': 'bold'})
             st.plotly_chart(fig_hist, use_container_width=True, config={'displayModeBar': False})
+        else:
+            st.info("Sin registros de inasistencias para este filtro.")
 
     with col_sup:
         st.subheader("📌 Ausencias por Supervisor")
-        if 'Jerarquia_Dinamica' in df_terr.columns:
+        if 'Jerarquia_Dinamica' in df_terr.columns and not df_terr.empty:
             top_sup = df_terr['Jerarquia_Dinamica'].value_counts().reset_index()
             top_sup.columns = ['Supervisor', 'Casos']
             fig_sup = px.bar(
@@ -343,30 +370,34 @@ if file_to_load:
             )
             fig_sup.update_traces(textposition='inside', textfont={'color': 'white', 'weight': 'bold'})
             st.plotly_chart(fig_sup, use_container_width=True, config={'displayModeBar': False})
+        else:
+            st.info("Sin ausencias por supervisor para este filtro.")
 
     st.divider()
 
     # --- TABLA Y DIAGNÓSTICO SUPERVISOR ---
     st.subheader("📋 Agentes Pendientes & Gestión de Supervisor")
 
-    if 'Jerarquia_Dinamica' in df_terr.columns:
-        supervisores_unicos = list(df_terr['Jerarquia_Dinamica'].dropna().unique())
-        ranking_sup_df = df_terr.groupby('Jerarquia_Dinamica').size().reset_index(name='Inasistencias').sort_values(by='Inasistencias', ascending=True).reset_index(drop=True)
+    # Obtención de la lista completa de supervisores del territorio (incluso si tienen 0 inasistencias en el tipo seleccionado)
+    supervisores_territorio = list(df_conf[df_conf['TERRITORIAL'] == selected_terr]['Jerarquia_Dinamica'].dropna().unique()) if 'Jerarquia_Dinamica' in df_conf.columns else []
 
-        col_select_sup, col_select_tipo, col_expert_sup = st.columns([1, 0.8, 1.2])
+    if supervisores_territorio:
+        col_select_sup, col_expert_sup = st.columns([1, 1.2])
 
         with col_select_sup:
-            selected_sup = st.selectbox("Filtrar Tabla por Supervisor:", ["Todos"] + supervisores_unicos)
+            selected_sup = st.selectbox("Filtrar Tabla por Supervisor:", ["Todos"] + supervisores_territorio)
 
-        with col_select_tipo:
-            selected_tipo = st.selectbox("Filtrar por Tipo Punto:", ["Todos", "FQ", "PR"])
+        sup_evaluado = selected_sup if selected_sup != "Todos" else supervisores_territorio[0]
 
-        sup_evaluado = selected_sup if selected_sup != "Todos" else (supervisores_unicos[0] if supervisores_unicos else "Sin Supervisor")
-
-        try:
-            rank_sup = ranking_sup_df[ranking_sup_df['Jerarquia_Dinamica'] == sup_evaluado].index[0] + 1
-        except IndexError:
-            rank_sup = 99
+        # Ranking del supervisor dentro del territorio
+        if not df_terr.empty:
+            ranking_sup_df = df_terr.groupby('Jerarquia_Dinamica').size().reset_index(name='Inasistencias').sort_values(by='Inasistencias', ascending=True).reset_index(drop=True)
+            try:
+                rank_sup = ranking_sup_df[ranking_sup_df['Jerarquia_Dinamica'] == sup_evaluado].index[0] + 1
+            except IndexError:
+                rank_sup = 99
+        else:
+            rank_sup = 1
 
         if rank_sup == 1:
             encabezado_sup = f"Felicidades {sup_evaluado} estás ocupando el 1er lugar. Para mantenerte cómo el líder deberás mejorar las siguientes oportunidades:"
@@ -382,21 +413,26 @@ if file_to_load:
                         st.error("API Key no configurada en los Secrets.")
                     else:
                         client = genai.Client(api_key=api_key)
-                        df_sup_actual = df_terr[df_terr['Jerarquia_Dinamica'] == sup_evaluado]
+                        df_sup_actual = df_terr[df_terr['Jerarquia_Dinamica'] == sup_evaluado] if not df_terr.empty else pd.DataFrame()
                         total_ausencias_sup = len(df_sup_actual)
-                        df_sup_hist = df_terr_historico[df_terr_historico['Jerarquia_Dinamica'] == sup_evaluado]
-                        tendencia_sup = df_sup_hist.groupby('post_titulo').size().to_dict() if 'post_titulo' in df_sup_hist.columns else {}
+                        
+                        df_sup_hist = df_terr_historico[df_terr_historico['Jerarquia_Dinamica'] == sup_evaluado] if not df_terr_historico.empty else pd.DataFrame()
+                        tendencia_sup = df_sup_hist.groupby('post_titulo').size().to_dict() if ('post_titulo' in df_sup_hist.columns and not df_sup_hist.empty) else {}
 
-                        agentes_sup = df_sup_actual[agentes_col].dropna().unique()
-                        recurrentes_cant = sum(1 for ag in agentes_sup if ag in agentes_recurrentes_set)
-                        nuevos_cant = len(agentes_sup) - recurrentes_cant
+                        if not df_sup_actual.empty:
+                            agentes_sup = df_sup_actual[agentes_col].dropna().unique()
+                            recurrentes_cant = sum(1 for ag in agentes_sup if ag in agentes_recurrentes_set)
+                            nuevos_cant = len(agentes_sup) - recurrentes_cant
+                        else:
+                            recurrentes_cant = 0
+                            nuevos_cant = 0
 
                         prompt_2 = f"""
                         Inicia tu respuesta OBLIGATORIAMENTE con esta oración exacta:
                         "{encabezado_sup}"
 
                         Luego analiza ESTRICTAMENTE los siguientes 3 puntos numerados (sin incluir conclusiones generales ni consejos adicionales fuera de ellos):
-                        1. Total de inasistencias en su zona ({total_ausencias_sup} inasistencias).
+                        1. Total de inasistencias en su zona ({total_ausencias_sup} inasistencias para el filtro de punto '{selected_tipo}').
                         2. Análisis de si viene mejorando o empeorando en inasistencia según sus datos históricos por conferencia:
                         {tendencia_sup}
                         3. Composición de sus agentes pendientes: {recurrentes_cant} son recurrentes y {nuevos_cant} son nuevos faltantes.
@@ -410,16 +446,10 @@ if file_to_load:
                             except Exception as e:
                                 st.error(f"Error al conectar con la IA: {e}")
 
+        # Filtrar tabla para visualización
         df_disp = df_terr.copy()
         if selected_sup != "Todos":
-            df_disp = df_disp[df_disp['Jerarquia_Dinamica'] == selected_sup]
-            
-        if 'TIPO' in df_disp.columns and selected_tipo != "Todos":
-            tipos_disp_upper = df_disp['TIPO'].fillna('').astype(str).str.upper()
-            if selected_tipo == "FQ":
-                df_disp = df_disp[tipos_disp_upper == 'FQ']
-            elif selected_tipo == "PR":
-                df_disp = df_disp[tipos_disp_upper.isin(['POS', 'TC'])]
+            df_disp = df_disp[df_disp['Jerarquia_Dinamica'] == selected_sup] if not df_disp.empty else pd.DataFrame()
 
     else:
         df_disp = df_terr
@@ -434,7 +464,7 @@ if file_to_load:
     st.download_button(
         label=f"📥 Descargar Excel Filtrado ({len(df_disp)} registros)",
         data=excel_data,
-        file_name=f"Inasistencias_{selected_terr}.xlsx",
+        file_name=f"Inasistencias_{selected_terr}_{selected_tipo}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
