@@ -8,46 +8,71 @@ import re
 
 st.set_page_config(page_title="La Tinka - Control de Inasistencias", layout="wide", initial_sidebar_state="collapsed")
 
-# --- INYECCIÓN CSS: MODO CLARO CORPORATIVO Y CORRECCIÓN DE BOTONES ---
+# --- INYECCIÓN CSS: MODO CLARO TOTAL (FORZADO ANTI-DARK MODE DE MÓVIL) ---
 st.markdown("""
 <style>
     /* 1. Fondo General Beige */
-    .stApp, [data-testid="stAppViewContainer"] {
+    .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
         background-color: #F5F0D4 !important;
         color: #000000 !important;
     }
     
-    /* 2. Textos y Etiquetados Generales */
+    /* 2. Textos y Encabezados */
     p, label, span, div {
         color: #000000 !important;
     }
     
-    /* 3. Encabezados en Verde Oscuro Tinka */
     h1, h2, h3, h4, h5, h6 {
         color: #096045 !important;
         font-weight: 800 !important;
     }
     
-    /* 4. Etiqueta sobre los Listados Desplegables */
     label[data-testid="stWidgetLabel"] p {
         color: #096045 !important;
         font-weight: bold !important;
         font-size: 1.05rem !important;
     }
     
-    /* 5. Cajas de Selección (Selectbox) */
+    /* 3. Cajas de Selección (Selectbox Principal) */
     div[data-baseweb="select"] > div {
         background-color: #FFFFFF !important;
         border: 2px solid #096045 !important;
         border-radius: 8px !important;
         color: #000000 !important;
     }
+    
     div[data-baseweb="select"] * {
         color: #000000 !important;
         background-color: #FFFFFF !important;
     }
-    
-    /* 6. Tarjetas de Métricas (KPIs) */
+
+    /* 4. MENÚ FLOTANTE DESPLEGABLE (POPOVER BASEWEB - CORRECCIÓN MODO OSCURO) */
+    [data-baseweb="popover"], 
+    [data-baseweb="menu"], 
+    ul[role="listbox"], 
+    li[role="option"] {
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+    }
+
+    li[role="option"] * {
+        color: #000000 !important;
+        background-color: #FFFFFF !important;
+    }
+
+    li[role="option"]:hover, 
+    li[role="option"][aria-selected="true"] {
+        background-color: #F5F0D4 !important;
+    }
+
+    li[role="option"]:hover *, 
+    li[role="option"][aria-selected="true"] * {
+        color: #096045 !important;
+        background-color: #F5F0D4 !important;
+        font-weight: bold !important;
+    }
+
+    /* 5. Tarjetas de Métricas (KPIs) */
     [data-testid="stMetric"] {
         background-color: #FFFFFF !important;
         padding: 12px 16px !important;
@@ -64,7 +89,7 @@ st.markdown("""
         font-weight: 800 !important;
     }
 
-    /* 7. Desplegables / Acordeones */
+    /* 6. Desplegables / Acordeones */
     div[data-testid="stExpander"] {
         background-color: #FFFFFF !important;
         border: 2px solid #096045 !important;
@@ -76,7 +101,7 @@ st.markdown("""
         font-size: 1.05rem !important;
     }
 
-    /* 8. BOTONES: TEXTO BLANCO Y NEGRITA FORZADO */
+    /* 7. Botones */
     div.stButton > button, 
     div.stDownloadButton > button,
     div.stButton > button *, 
@@ -97,14 +122,14 @@ st.markdown("""
         color: #FFFFFF !important;
     }
 
-    /* 9. Tabla / Dataframe */
+    /* 8. Tabla / Dataframe */
     [data-testid="stDataFrame"] {
         background-color: #FFFFFF !important;
         border: 1px solid #096045 !important;
         border-radius: 8px !important;
     }
 
-    /* 10. Bloques de código para copiar */
+    /* 9. Bloques de código para copiar */
     div[data-testid="stCodeBlock"] {
         background-color: #FFFFFF !important;
         border: 1px solid #096045 !important;
@@ -223,7 +248,6 @@ if file_to_load:
                 with st.spinner("Analizando desempeño territorial..."):
                     try:
                         res = client.models.generate_content(model="gemini-3.6-flash", contents=prompt_1)
-                        # Formato con vista bonita + opción de copiado fácil
                         st.markdown(res.text)
                         st.caption("📋 **Toca el recuadro inferior para copiar el texto:**")
                         st.code(res.text, language=None)
@@ -380,7 +404,6 @@ if file_to_load:
                         with st.spinner("Analizando desempeño del supervisor..."):
                             try:
                                 res = client.models.generate_content(model="gemini-3.6-flash", contents=prompt_2)
-                                # Formato con vista bonita + opción de copiado fácil
                                 st.markdown(res.text)
                                 st.caption("📋 **Toca el recuadro inferior para copiar el texto:**")
                                 st.code(res.text, language=None)
